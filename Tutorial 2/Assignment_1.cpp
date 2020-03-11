@@ -12,7 +12,7 @@ void print_help() {
 	std::cerr << "  -p : select platform " << std::endl;
 	std::cerr << "  -d : select device" << std::endl;
 	std::cerr << "  -l : list all platforms and devices" << std::endl;
-	std::cerr << "  -f : select test.pgm" << std::endl;
+	std::cerr << "  -f : select image" << std::endl;
 	std::cerr << "  -h : print this message" << std::endl;
 }
 
@@ -75,34 +75,54 @@ int main(int argc, char **argv) {
 	/*	typedef int mytype;
 		size_t local_size = 10;*/
 
-		// number of bins
+		// number of bins (Histogram)
 		vector<int> H(256);
+
+		// number of bins (cumulative histogram)
+		vector<int> CH(256);
+
+		// The size of the histogram is set to 256
 		int Histogram_size = 256;
+		// The histogram_total will be the size of the histogram times the size of int
 		int Histogram_total = Histogram_size * sizeof(int);
-		 																  
+		int Cumulative_histogram_total = sizeof(H);
 		//device - buffers
 		cl::Buffer dev_image_input(context, CL_MEM_READ_ONLY, image_total);
 		cl::Buffer histogram(context, CL_MEM_READ_ONLY, Histogram_total);
+		cl::Buffer cumulative_histogram(context, CL_MEM_READ_ONLY, Cumulative_histogram_total);
 		cl::Buffer dev_image_output(context, CL_MEM_READ_WRITE, image_total);
 
 		/// A kernel operate each element of a stream and writes the to an output string 
+		// The buffer for the input image to provide the total length of the image 
 		queue.enqueueWriteBuffer(dev_image_input, CL_TRUE, 0, image_total, &image_input[0]);
+		// (First step) In the buffer for the histogram to provide the total length of the histogrm
 		queue.enqueueFillBuffer(histogram, 0, 0, Histogram_total);
+		// (Second step) In the buffer for the cuumaltiative histogram 
+		queue.enqueueFillBuffer(cumulative_histogram, 0, 0, Cumulative_histogram_total);
+
+ 
+	    // In the buffer it displays the result for the length of the length on image  
 		queue.enqueueFillBuffer(dev_image_output, 0, 0, image_total);
 
-
+	
 
 		//4.2 Setup and execute the kernel (i.e. device code)
-		cl::Kernel kernel = cl::Kernel(program, "the_hist_simple");
+		cl::Kernel kernel = cl::Kernel(program, "scan_add_atomic");
+	
+
+		// 
 		kernel.setArg(0, dev_image_input);
-		kernel.setArg(1, histogram);
-//		kernel.setArg(2, dev_convolution_mask);
+	//	kernel.setArg(1, histogram);
+		kernel.setArg(1, cumulative_histogram);
 
 		queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(image_input.size()), cl::NullRange);
 
 		queue.enqueueReadBuffer(histogram, CL_TRUE, 0, Histogram_total, &H[0]);
-		cout << H;
+	//	cout << H;
 
+		queue.enqueueReadBuffer(cumulative_histogram, CL_TRUE, 0, Cumulative_histogram_total, &CH[0]);
+		cout << CH;
+	
 		/*
 		vector<unsigned char> output_buffer(image_input.size());
 		//4.3 Copy the result from device to host

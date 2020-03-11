@@ -21,11 +21,11 @@ kernel void the_hist_simple(global const unsigned char* A, global int* H) {
 
 
 //The atomic add for scan 
-kernel void add_atomic(global int* A, global int* B) {
+kernel void scan_add_atomic(global const unsigned char* A, global int* CH) {
 	int id = get_global_id(0);
 	int N = get_global_size(0);
 	for (int i = id + 1; i < N; i++)
-		atomic_add(&B[i], A[id]);
+		atomic_add(&CH[i], A[id]);
 }
 
 //simple ND identity kernel
