@@ -12,12 +12,11 @@ kernel void filter_r(global const uchar* A, global uchar* B) {
 	B[id] = A[id];
 }
 // The histogram 
-kernel void the_hist_simple(global const int* A, global int* H) {
+kernel void the_hist_simple(global const unsigned char* A, global int* H) {
 	int id = get_global_id(0);
 	//assumes that H has been initialised to 0
 	int bin_index = A[id];//take value as a bin index
-	atomic_inc(&H[bin_index]);//serial operation, not very efficient!
-
+	atomic_inc(&H[0]);//serial operation, not very efficient!
 }
 
 

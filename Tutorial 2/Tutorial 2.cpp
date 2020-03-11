@@ -33,9 +33,7 @@ int main(int argc, char **argv) {
 
 	//detect any potential exceptions
 	try {
-		CImg<unsigned char> image_input(image_filename.c_str());
-		CImgDisplay disp_input(image_input,"input");
-
+		
 		//a 3x3 convolution mask implementing an averaging filter
 		std::vector<float> convolution_mask = { 1.f / 9, 1.f / 9, 1.f / 9,
 												1.f / 9, 1.f / 9, 1.f / 9,
@@ -69,61 +67,57 @@ int main(int argc, char **argv) {
 			throw err;
 		}
 
-		typedef int mytype;
-		size_t local_size = 10;
+		CImg<unsigned char> image_input(image_filename.c_str());
+		CImgDisplay disp_input(image_input,"input");
+		int image_size = image_input.size();
+		int image_total = image_size*sizeof(unsigned char);
+
+	/*	typedef int mytype;
+		size_t local_size = 10;*/
 
 		// number of bins
 		vector<int> H(256);
-		
-	    std::vector<mytype> A(10, 1);
-        size_t input_size = A.size() * sizeof(mytype);//size in bytes
-
-		// the input elements
-	    size_t input_elements = A.size();
-
-	
-		// output (host)
-		std::vector<mytype> B(input_elements);
-		size_t output_size = B.size() * sizeof(mytype);//
-
-		size_t nr_groups = input_elements / local_size;
-
-		// The number of bins for H
-		
-
+		int Histogram_size = 256;
+		int Histogram_total = Histogram_size * sizeof(int);
+		 																  
 		//device - buffers
-		cl::Buffer buffer_A(context, CL_MEM_READ_ONLY, input_size);
-		cl::Buffer buffer_B(context, CL_MEM_READ_WRITE, output_size);
+		cl::Buffer dev_image_input(context, CL_MEM_READ_ONLY, image_total);
+		cl::Buffer histogram(context, CL_MEM_READ_ONLY, Histogram_total);
+		cl::Buffer dev_image_output(context, CL_MEM_READ_WRITE, image_total);
 
-		//4.1 Copy images to device memory
-		queue.enqueueWriteBuffer(buffer_A, CL_TRUE, 0, input_size, &A[0]);
-		queue.enqueueFillBuffer(buffer_B, 0, 0, output_size); //zero B buffer on device memory
+		/// A kernel operate each element of a stream and writes the to an output string 
+		queue.enqueueWriteBuffer(dev_image_input, CL_TRUE, 0, image_total, &image_input[0]);
+		queue.enqueueFillBuffer(histogram, 0, 0, Histogram_total);
+		queue.enqueueFillBuffer(dev_image_output, 0, 0, image_total);
 
 
-		//device - buffers
-		cl::Buffer dev_image_input(context, CL_MEM_READ_ONLY, image_input.size());
-		cl::Buffer dev_image_output(context, CL_MEM_READ_WRITE, image_input.size());
+
 		//4.2 Setup and execute the kernel (i.e. device code)
-		cl::Kernel kernel = cl::Kernel(program, "identityND");
+		cl::Kernel kernel = cl::Kernel(program, "the_hist_simple");
 		kernel.setArg(0, dev_image_input);
-		kernel.setArg(1, dev_image_output);
+		kernel.setArg(1, histogram);
 //		kernel.setArg(2, dev_convolution_mask);
 
 		queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(image_input.width(), image_input.height(), image_input.spectrum()), cl::NullRange);
 
+		queue.enqueueReadBuffer(histogram, CL_TRUE, 0, Histogram_total, &H[0]);
+		cout << H;
+
+		/*
 		vector<unsigned char> output_buffer(image_input.size());
 		//4.3 Copy the result from device to host
 		queue.enqueueReadBuffer(dev_image_output, CL_TRUE, 0, output_buffer.size(), &output_buffer.data()[0]);
 
 		CImg<unsigned char> output_image(output_buffer.data(), image_input.width(), image_input.height(), image_input.depth(), image_input.spectrum());
 		CImgDisplay disp_output(output_image,"output");
-
+		   
  		while (!disp_input.is_closed() && !disp_output.is_closed()
 			&& !disp_input.is_keyESC() && !disp_output.is_keyESC()) {
 		    disp_input.wait(1);
 		    disp_output.wait(1);
 	    }		
-
+		*/
+		
 	}
 	catch (const cl::Error& err) {
 		std::cerr << "ERROR: " << err.what() << ", " << getErrorString(err.err()) << std::endl;
