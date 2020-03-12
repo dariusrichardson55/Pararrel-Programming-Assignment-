@@ -85,42 +85,45 @@ int main(int argc, char **argv) {
 		int Histogram_size = 256;
 		// The histogram_total will be the size of the histogram times the size of int
 		int Histogram_total = Histogram_size * sizeof(int);
-		int Cumulative_histogram_total = sizeof(H);
+		int Cumulative_histogram_total = Histogram_total * sizeof(H);
 		//device - buffers
 		cl::Buffer dev_image_input(context, CL_MEM_READ_ONLY, image_total);
 		cl::Buffer histogram(context, CL_MEM_READ_ONLY, Histogram_total);
-		cl::Buffer cumulative_histogram(context, CL_MEM_READ_ONLY, Cumulative_histogram_total);
-		cl::Buffer dev_image_output(context, CL_MEM_READ_WRITE, image_total);
+		cl::Buffer Cumulative_histogram(context, CL_MEM_READ_ONLY, Cumulative_histogram_total);
+		cl::Buffer dev_image_output(context, CL_MEM_READ_WRITE, Histogram_total);
 
 		/// A kernel operate each element of a stream and writes the to an output string 
 		// The buffer for the input image to provide the total length of the image 
-		queue.enqueueWriteBuffer(dev_image_input, CL_TRUE, 0, image_total, &image_input[0]);
+		queue.enqueueWriteBuffer(dev_image_input, CL_TRUE, 0, Histogram_total, &H[0]);
+		queue.enqueueWriteBuffer(histogram, CL_TRUE, 0, Cumulative_histogram_total, &CH[0]);
 		// (First step) In the buffer for the histogram to provide the total length of the histogrm
 		queue.enqueueFillBuffer(histogram, 0, 0, Histogram_total);
+		queue.enqueueFillBuffer(Cumulative_histogram, 0, 0, Cumulative_histogram_total);
 		// (Second step) In the buffer for the cuumaltiative histogram 
-		queue.enqueueFillBuffer(cumulative_histogram, 0, 0, Cumulative_histogram_total);
+	//	queue.enqueueFillBuffer(cumulative_histogram, 0, 0, Cumulative_histogram_total);
 
  
 	    // In the buffer it displays the result for the length of the length on image  
 		queue.enqueueFillBuffer(dev_image_output, 0, 0, image_total);
+		queue.enqueueFillBuffer(histogram, 0, 0, Cumulative_histogram_total);
 
 	
 
 		//4.2 Setup and execute the kernel (i.e. device code)
-		cl::Kernel kernel = cl::Kernel(program, "scan_add_atomic");
+		cl::Kernel kernel = cl::Kernel(program, "the_hist_simple");
 	
 
-		// 
+		
 		kernel.setArg(0, dev_image_input);
-	//	kernel.setArg(1, histogram);
-		kernel.setArg(1, cumulative_histogram);
+		kernel.setArg(1, histogram);
+		kernel.setArg(2, Cumulative_histogram);
 
-		queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(image_input.size()), cl::NullRange);
+		queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(CH.size()), cl::NullRange);
 
-		queue.enqueueReadBuffer(histogram, CL_TRUE, 0, Histogram_total, &H[0]);
-	//	cout << H;
+		queue.enqueueReadBuffer(histogram, CL_TRUE, 0, Histogram_total, &CH[0]);
+		cout << H;
 
-		queue.enqueueReadBuffer(cumulative_histogram, CL_TRUE, 0, Cumulative_histogram_total, &CH[0]);
+	//	queue.enqueueReadBuffer(cumulative_histogram, CL_TRUE, 0, Cumulative_histogram_total, &CH[0]);
 		cout << CH;
 	
 		/*
