@@ -26,13 +26,40 @@ kernel void the_hist_simple(global const unsigned char* A, global int* H) {
 	H[id] = counter;
 }
 
-//The atomic add for scan 
+//The Cumulative Histogram
+// atomic add for scan 
 kernel void scan_add_atomic(global int* A, global int* CH) {
 	int id = get_global_id(0);
 	int N = get_global_size(0);
 	for (int i = id + 1; i < N; i++)
 		atomic_add(&CH[i], A[id]);
 }
+
+kernel void normalise(global int* CH, global int* NH) {
+
+int id = get_global_id(0);
+float x = CH[id];
+int max = CH[255];
+int min = CH[0];
+
+float equation = (x-min)/(max-min); 
+
+  NH[id] = equation * 255;
+
+}
+
+
+kernel void reprojection(global const uchar* input, global uchar* output, global const int* LUT) {
+
+  int id = get_global_id(0); 
+  int x = input[id];
+  int x_reprojection = LUT[x];
+
+  output[id] = x_reprojection;
+
+}
+
+
 
 //simple ND identity kernel
 kernel void identityND(global const uchar* A, global uchar* B) {

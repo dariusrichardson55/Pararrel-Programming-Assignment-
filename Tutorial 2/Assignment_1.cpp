@@ -5,6 +5,21 @@
 #include "CImg.h"
 
 using namespace cimg_library;
+/* Short Summary
+
+Host code
+First to implement would be assign H and CH, H being Histogram and CH being the Cumulative Histogram. 
+Both are set to 256 being the total number of bins, the histogram size needs to be set to 256 for the bins and
+
+Kernels
+The for loop will start at i being equal to 0 then the get_global_size is less then i meaning that it will 
+go through each individual value until it reaches to what the program is looking for. By assigning A[i] to be == to the id
+which will be what the program is looking for when looping then the counter will add + until A[i] is not == to id.
+
+
+The scan add atomic is the kernel used for cumulative histogram
+
+*/
 
 void print_help() {
 	std::cerr << "Application usage:" << std::endl;
@@ -72,33 +87,43 @@ int main(int argc, char **argv) {
 		int image_size = image_input.size();
 		int image_total = image_size*sizeof(unsigned char);
 
+
+	
+
 	/*	typedef int mytype;
 		size_t local_size = 10;*/
 
 		// number of bins (Histogram)
 		vector<int> H(256);
 		vector<int> CH(256);
+		vector<int> NL(256);		
+		
 		// number of bins (cumulative histogram)
 		
 
 		// The size of the histogram is set to 256
 		int Histogram_size = 256;
+
 		// The histogram_total will be the size of the histogram times the size of int
 		int Histogram_total = Histogram_size * sizeof(int);
 		int cumulative_histogram_total = Histogram_size * sizeof(int);
+		int normalise_total = Histogram_size * sizeof(int);
+
 		//device - buffers
 		cl::Buffer dev_image_input(context, CL_MEM_READ_ONLY, image_total);
 		cl::Buffer histogram(context, CL_MEM_READ_ONLY, Histogram_total);
 		cl::Buffer cumulative_histogram(context, CL_MEM_READ_ONLY, cumulative_histogram_total);
+		cl::Buffer normalise(context, CL_MEM_READ_ONLY, cumulative_histogram_total);
 	    cl::Buffer dev_image_output(context, CL_MEM_READ_WRITE, image_total);
 
-		/// A kernel operate each element of a stream and writes the to an output string 
+		/// A kernel operate each element of a stream and writes  to an output string 
 		// The buffer for the input image to provide the total length of the image 
 		queue.enqueueWriteBuffer(dev_image_input, CL_TRUE, 0, image_total, &image_input[0]);
 
 		// (First step) In the buffer for the histogram to provide the total length of the histogrm
 		queue.enqueueFillBuffer(histogram, 0, 0, Histogram_total);
 		queue.enqueueFillBuffer(cumulative_histogram, 0, 0, cumulative_histogram_total);
+		queue.enqueueFillBuffer(normalise, 0, 0, cumulative_histogram_total);
 		queue.enqueueFillBuffer(dev_image_output, 0, 0, image_total);
 
 		// (Second step) In the buffer for the cuumaltiative histogram 
@@ -111,29 +136,41 @@ int main(int argc, char **argv) {
 		
 		
 		//4.2 Setup and execute the kernel (i.e. device code)
-
 		cl::Kernel kernel = cl::Kernel(program, "the_hist_simple");	
 		cl::Kernel kernel2 = cl::Kernel(program, "scan_add_atomic");
+		cl::Kernel kernel3 = cl::Kernel(program, "normalise");
+		
 
 		kernel.setArg(0, dev_image_input);
 		kernel.setArg(1, histogram);
 		kernel2.setArg(0, histogram);
 		kernel2.setArg(1, cumulative_histogram);
-	
+		kernel3.setArg(0, cumulative_histogram);
+		kernel3.setArg(1, normalise);
+		
 		
 
 	
 
 		queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(image_input.size()), cl::NullRange);
 		queue.enqueueNDRangeKernel(kernel2, cl::NullRange, cl::NDRange(CH.size()), cl::NullRange);
-
-
+		queue.enqueueNDRangeKernel(kernel3, cl::NullRange, cl::NDRange(NL.size()), cl::NullRange);
+		
 		queue.enqueueReadBuffer(histogram, CL_TRUE, 0, Histogram_total, &H[0]);
 		queue.enqueueReadBuffer(cumulative_histogram, CL_TRUE, 0, cumulative_histogram_total, &CH[0]);
-		
-		cout << H;
-		cout << CH;
-		
+		queue.enqueueReadBuffer(normalise, CL_TRUE, 0, normalise_total, &NL[0]);
+	
+
+		cout << "Histogram" << endl;
+		cout << H << endl;
+
+		cout << "Cumulative Histogram" << endl;
+		cout << CH << endl;
+
+		cout << "Normalisation" << endl;
+		cout << NL;
+
+	
 	}
 	catch (const cl::Error& err) {
 		std::cerr << "ERROR: " << err.what() << ", " << getErrorString(err.err()) << std::endl;
