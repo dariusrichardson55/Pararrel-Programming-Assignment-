@@ -8,16 +8,13 @@ using namespace cimg_library;
 /* Short Summary
 
 Host code
-First to implement would be assign H and CH, H being Histogram and CH being the Cumulative Histogram. 
-Both are set to 256 being the total number of bins, the histogram size needs to be set to 256 for the bins and
+Step 1: I have assigned bins sizes to 256 for 
+
 
 Kernels
-The for loop will start at i being equal to 0 then the get_global_size is less then i meaning that it will 
-go through each individual value until it reaches to what the program is looking for. By assigning A[i] to be == to the id
-which will be what the program is looking for when looping then the counter will add + until A[i] is not == to id.
 
 
-The scan add atomic is the kernel used for cumulative histogram
+
 
 */
 
@@ -88,7 +85,7 @@ int main(int argc, char **argv) {
 		int image_total = image_size*sizeof(unsigned char);
 
 
-	
+
 
 	/*	typedef int mytype;
 		size_t local_size = 10;*/
@@ -97,7 +94,7 @@ int main(int argc, char **argv) {
 		vector<int> H(256);
 		vector<int> CH(256);
 		vector<int> NL(256);		
-		
+
 		// number of bins (cumulative histogram)
 		
 
@@ -108,12 +105,13 @@ int main(int argc, char **argv) {
 		int Histogram_total = Histogram_size * sizeof(int);
 		int cumulative_histogram_total = Histogram_size * sizeof(int);
 		int normalise_total = Histogram_size * sizeof(int);
+		int output_total = Histogram_size * sizeof(unsigned char);
 
-		//device - buffers
+		//The device buffers
 		cl::Buffer dev_image_input(context, CL_MEM_READ_ONLY, image_total);
 		cl::Buffer histogram(context, CL_MEM_READ_ONLY, Histogram_total);
 		cl::Buffer cumulative_histogram(context, CL_MEM_READ_ONLY, cumulative_histogram_total);
-		cl::Buffer normalise(context, CL_MEM_READ_ONLY, cumulative_histogram_total);
+		cl::Buffer normalise(context, CL_MEM_READ_ONLY, normalise_total);
 	    cl::Buffer dev_image_output(context, CL_MEM_READ_WRITE, image_total);
 
 		/// A kernel operate each element of a stream and writes  to an output string 
@@ -121,16 +119,13 @@ int main(int argc, char **argv) {
 		queue.enqueueWriteBuffer(dev_image_input, CL_TRUE, 0, image_total, &image_input[0]);
 
 		// (First step) In the buffer for the histogram to provide the total length of the histogrm
+
 		queue.enqueueFillBuffer(histogram, 0, 0, Histogram_total);
 		queue.enqueueFillBuffer(cumulative_histogram, 0, 0, cumulative_histogram_total);
-		queue.enqueueFillBuffer(normalise, 0, 0, cumulative_histogram_total);
-		queue.enqueueFillBuffer(dev_image_output, 0, 0, image_total);
+		queue.enqueueFillBuffer(normalise, 0, 0, normalise_total);
+		queue.enqueueFillBuffer(dev_image_output, 0, 0, output_total);
 
-		// (Second step) In the buffer for the cuumaltiative histogram 
-	
- 
 	    // In the buffer it displays the result for the length of the length on image  
-		queue.enqueueFillBuffer(dev_image_output, 0, 0, image_total);
 		queue.enqueueFillBuffer(histogram, 0, 0, Histogram_total);
 
 		
@@ -139,7 +134,8 @@ int main(int argc, char **argv) {
 		cl::Kernel kernel = cl::Kernel(program, "the_hist_simple");	
 		cl::Kernel kernel2 = cl::Kernel(program, "scan_add_atomic");
 		cl::Kernel kernel3 = cl::Kernel(program, "normalise");
-		
+		cl::Kernel kernel4 = cl::Kernel(program, "reprojection");
+
 
 		kernel.setArg(0, dev_image_input);
 		kernel.setArg(1, histogram);
@@ -147,19 +143,27 @@ int main(int argc, char **argv) {
 		kernel2.setArg(1, cumulative_histogram);
 		kernel3.setArg(0, cumulative_histogram);
 		kernel3.setArg(1, normalise);
-		
-		
+
+		kernel4.setArg(0, dev_image_input);
+		kernel4.setArg(1, dev_image_output);
+		kernel4.setArg(2, normalise);
 
 	
+
+		CImg<unsigned char> output_image(image_filename.c_str());
 
 		queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(image_input.size()), cl::NullRange);
 		queue.enqueueNDRangeKernel(kernel2, cl::NullRange, cl::NDRange(CH.size()), cl::NullRange);
 		queue.enqueueNDRangeKernel(kernel3, cl::NullRange, cl::NDRange(NL.size()), cl::NullRange);
-		
+		queue.enqueueNDRangeKernel(kernel4, cl::NullRange, cl::NDRange(output_image.size()), cl::NullRange);
+
 		queue.enqueueReadBuffer(histogram, CL_TRUE, 0, Histogram_total, &H[0]);
 		queue.enqueueReadBuffer(cumulative_histogram, CL_TRUE, 0, cumulative_histogram_total, &CH[0]);
 		queue.enqueueReadBuffer(normalise, CL_TRUE, 0, normalise_total, &NL[0]);
-	
+		queue.enqueueReadBuffer(dev_image_output, CL_TRUE, 0, image_total, &output_image[0]);
+		
+
+
 
 		cout << "Histogram" << endl;
 		cout << H << endl;
@@ -167,11 +171,19 @@ int main(int argc, char **argv) {
 		cout << "Cumulative Histogram" << endl;
 		cout << CH << endl;
 
-		cout << "Normalisation" << endl;
+		cout << "Normalisation";
 		cout << NL;
 
-	
+		CImgDisplay disp_output(output_image, "output");
+
+		while (!disp_input.is_closed() && !disp_output.is_closed()
+			&& !disp_input.is_keyESC() && !disp_output.is_keyESC()) {
+			disp_input.wait(1);
+			disp_output.wait(1);
+		}
+
 	}
+
 	catch (const cl::Error& err) {
 		std::cerr << "ERROR: " << err.what() << ", " << getErrorString(err.err()) << std::endl;
 	}
